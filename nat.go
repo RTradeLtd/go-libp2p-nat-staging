@@ -59,7 +59,7 @@ func DiscoverNAT(ctx context.Context, timeout time.Duration, logger *zap.Logger)
 		logger.Debug("gateway address found", zap.String("address", addr.String()))
 	}
 
-	return newNAT(ctx, natInstance), nil
+	return newNAT(ctx, natInstance, logger), nil
 }
 
 // NAT is an object that manages address port mappings in
@@ -76,13 +76,14 @@ type NAT struct {
 	logger    *zap.Logger
 }
 
-func newNAT(ctx context.Context, realNAT nat.NAT) *NAT {
+func newNAT(ctx context.Context, realNAT nat.NAT, logger *zap.Logger) *NAT {
 	ctx, cancel := context.WithCancel(ctx)
 	return &NAT{
 		nat:      realNAT,
 		ctx:      ctx,
 		cancel:   cancel,
 		mappings: make(map[*mapping]struct{}),
+		logger:   logger.Named("libnat"),
 	}
 }
 
