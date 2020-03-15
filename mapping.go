@@ -1,12 +1,11 @@
 package nat
 
 import (
+	"context"
 	"fmt"
 	"net"
 	"sync"
 	"time"
-
-	"github.com/jbenet/goprocess"
 )
 
 // Mapping represents a port mapping in a NAT.
@@ -43,8 +42,8 @@ type mapping struct {
 	intport   int
 	extport   int
 	permanent bool
-	proc      goprocess.Process
-
+	ctx       context.Context
+	cancel    context.CancelFunc
 	cached    net.IP
 	cacheTime time.Time
 	cacheLk   sync.Mutex
@@ -118,5 +117,10 @@ func (m *mapping) ExternalAddr() (net.Addr, error) {
 }
 
 func (m *mapping) Close() error {
-	return m.proc.Close()
+	m.cancel()
+	m.nat.rmMapping(m)
+	m.nat.natmu.Lock()
+	m.nat.nat.DeletePortMapping(m.Protocol(), m.InternalPort())
+	m.nat.natmu.Unlock()
+	return nil
 }

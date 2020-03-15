@@ -1,9 +1,8 @@
-module github.com/libp2p/go-libp2p-nat
+module github.com/RTradeLtd/go-libp2p-nat-staging
 
 go 1.13
 
 require (
+	github.com/RTradeLtd/go-nat v0.0.5
 	github.com/ipfs/go-log v1.0.2
-	github.com/jbenet/goprocess v0.1.3
-	github.com/libp2p/go-nat v0.0.4
 )
