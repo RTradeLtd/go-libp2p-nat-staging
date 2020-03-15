@@ -8,15 +8,13 @@ import (
 	"time"
 
 	nat "github.com/RTradeLtd/go-nat"
-	logging "github.com/ipfs/go-log"
+	"go.uber.org/zap"
 )
 
 var (
 	// ErrNoMapping signals no mapping exists for an address
 	ErrNoMapping = errors.New("mapping not established")
 )
-
-var log = logging.Logger("nat")
 
 // DefaultTimeout for discovering nat
 var DefaultTimeout = nat.DefaultTimeout
@@ -30,7 +28,7 @@ const CacheTime = time.Second * 15
 
 // DiscoverNAT looks for a NAT device in the network and
 // returns an object that can manage port mappings.
-func DiscoverNAT(ctx context.Context, timeout time.Duration) (*NAT, error) {
+func DiscoverNAT(ctx context.Context, timeout time.Duration, logger *zap.Logger) (*NAT, error) {
 	var (
 		natInstance nat.NAT
 		err         error
@@ -56,9 +54,9 @@ func DiscoverNAT(ctx context.Context, timeout time.Duration) (*NAT, error) {
 	// Log the device addr.
 	addr, err := natInstance.GetDeviceAddress()
 	if err != nil {
-		log.Debug("DiscoverGateway address error:", err)
+		logger.Warn("DiscoverGateway error", zap.Error(err))
 	} else {
-		log.Debug("DiscoverGateway address:", addr)
+		logger.Debug("gateway address found", zap.String("address", addr.String()))
 	}
 
 	return newNAT(ctx, natInstance), nil
@@ -75,6 +73,7 @@ type NAT struct {
 	cancel    context.CancelFunc
 	mappingmu sync.RWMutex // guards mappings
 	mappings  map[*mapping]struct{}
+	logger    *zap.Logger
 }
 
 func newNAT(ctx context.Context, realNAT nat.NAT) *NAT {
@@ -164,7 +163,7 @@ func (nat *NAT) NewMapping(protocol string, port int) (Mapping, error) {
 func (nat *NAT) establishMapping(m *mapping) {
 	oldport := m.ExternalPort()
 
-	log.Debugf("Attempting port map: %s/%d", m.Protocol(), m.InternalPort())
+	nat.logger.Debug("attempting port map creation", zap.String("protocol", m.Protocol()), zap.Int("internal.port", m.InternalPort()))
 	comment := "libp2p"
 
 	nat.natmu.Lock()
@@ -177,16 +176,14 @@ func (nat *NAT) establishMapping(m *mapping) {
 
 	if err != nil || newport == 0 {
 		m.setExternalPort(0) // clear mapping
-		// TODO: log.Event
-		log.Warnf("failed to establish port mapping: %s", err)
+		nat.logger.Error("failed to establish mapping", zap.Error(err))
 		// we do not close if the mapping failed,
 		// because it may work again next time.
 		return
 	}
 
 	m.setExternalPort(newport)
-	log.Debugf("NAT Mapping: %d --> %d (%s)", m.ExternalPort(), m.InternalPort(), m.Protocol())
 	if oldport != 0 && newport != oldport {
-		log.Debugf("failed to renew same port mapping: ch %d -> %d", oldport, newport)
+		nat.logger.Warn("failed to renew port mapping", zap.Int("old.port", oldport), zap.Int("new.port", newport))
 	}
 }
